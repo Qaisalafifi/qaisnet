@@ -22,8 +22,12 @@ COPY . /var/www/html
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 RUN composer install --no-dev --optimize-autoloader
 
-# 5. ضبط صلاحيات المجلدات (ضروري جداً في لینوكس)
+
+# تغيير ملكية الملفات للمستخدم الخاص بالسيرفر
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+
+# إعطاء صلاحيات القراءة والكتابة
+RUN chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
 EXPOSE 80
 
