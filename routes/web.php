@@ -19,3 +19,10 @@ Route::get('/storage-proxy/{path}', function ($path) {
         ->header('Access-Control-Allow-Methods', 'GET, OPTIONS')
         ->header('Access-Control-Allow-Headers', '*');
 })->where('path', '.*');
+
+use Illuminate\Support\Facades\Artisan;
+
+Route::get('/run-migrate', function () {
+    Artisan::call('migrate:fresh --force');
+    return "تم رفع الجداول بنجاح: " . Artisan::output();
+});
