@@ -1,22 +1,31 @@
-# Dockerfile
 FROM php:8.3-apache
 
-WORKDIR /var/www/html
-
-COPY . /var/www/html
-
+# 1. تثبيت الاعتمادات وتفعيل مود الـ Rewrite لـ Laravel
 RUN apt-get update && apt-get install -y \
     libzip-dev \
     unzip \
     git \
-    && docker-php-ext-install zip pdo pdo_mysql
+    && docker-php-ext-install zip pdo pdo_mysql \
+    && a2enmod rewrite
 
-# تثبيت Composer
+# 2. تغيير مسار الـ DocumentRoot لمجلد public (حل مشكلة 403/500)
+ENV APACHE_DOCUMENT_ROOT /var/www/html/public
+RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf
+RUN sed -ri -e 's!/var/www/apache2!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
+
+WORKDIR /var/www/html
+
+# 3. نسخ ملفات المشروع
+COPY . /var/www/html
+
+# 4. تثبيت Composer والحزم
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
-
-# تثبيت الحزم
 RUN composer install --no-dev --optimize-autoloader
 
-# إعدادات Apache
+# 5. ضبط صلاحيات المجلدات (ضروري جداً في لینوكس)
+RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+
 EXPOSE 80
-CMD ["apache2-foreground"]
+
+# 6. تشغيل المايجريشن تلقائياً ثم تشغيل السيرفر
+CMD php artisan migrate --force && apache2-foreground
