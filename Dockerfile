@@ -26,10 +26,15 @@ RUN composer install --no-dev --optimize-autoloader
 # تغيير ملكية الملفات للمستخدم الخاص بالسيرفر
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
+
+
 # إعطاء صلاحيات القراءة والكتابة
 RUN chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
+RUN chmod -R 777 /var/www/html/storage /var/www/html/bootstrap/cache
+RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 EXPOSE 80
 
 # 6. تشغيل المايجريشن تلقائياً ثم تشغيل السيرفر
-CMD php artisan migrate --force && apache2-foreground
+CMD php artisan config:clear && php artisan route:clear && php artisan migrate --force && apache2-foreground
+
