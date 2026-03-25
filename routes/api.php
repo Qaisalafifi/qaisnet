@@ -12,6 +12,11 @@ use App\Http\Controllers\Api\ShopController;
 use App\Http\Controllers\Api\ShopNetworkController;
 use Illuminate\Support\Facades\Route;
 
+Route::get('/refresh', function() {
+    Artisan::call('route:clear');
+    return "Routes Cleared";
+});
+
 // ── Auth ───────────────────────────────────────────────────────────────────
 Route::post('/login',    [AuthController::class, 'login']);
 Route::post('/register', [AuthController::class, 'register']);
