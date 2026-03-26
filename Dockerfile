@@ -36,5 +36,7 @@ RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cac
 EXPOSE 80
 
 # 6. تشغيل المايجريشن تلقائياً ثم تشغيل السيرفر
-CMD php artisan config:clear && php artisan route:clear && php artisan migrate --force && apache2-foreground
+
+# السطر الأخير في ملف Dockerfile
+CMD php artisan config:clear && php artisan route:clear && php artisan migrate --force --seed && apache2-foreground
 
