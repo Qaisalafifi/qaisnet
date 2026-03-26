@@ -1,5 +1,7 @@
 <?php
-
+use Illuminate\Support\Facades\Artisan;
+use App\Models\User;
+use Illuminate\Support\Facades\Hash;
 use App\Http\Controllers\Api\AdminController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CardController;
@@ -125,5 +127,24 @@ Route::get('/run-seed', function () {
         return "تمت إضافة البيانات بنجاح في قاعدة البيانات!";
     } catch (\Exception $e) {
         return "حدث خطأ: " . $e->getMessage();
+    }
+});
+
+Route::get('/fix-auth', function () {
+    try {
+        // 1. مسح المستخدمين القدامى للتأكد من نظافة الجدول
+        User::truncate(); 
+
+        // 2. إضافة مستخدم جديد بكلمة سر مشفرة برمجياً
+        User::create([
+            'name' => 'Admin Qais',
+            'email' => 'admin@qaisnet.com',
+            'password' => Hash::make('admin123'), // هنا السر!
+            'role' => 'admin',
+        ]);
+
+        return "تم تحديث البيانات وتشفير كلمة السر بنجاح!";
+    } catch (\Exception $e) {
+        return "خطأ: " . $e->getMessage();
     }
 });
