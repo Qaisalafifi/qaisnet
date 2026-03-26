@@ -35,6 +35,7 @@ RUN chmod -R 777 /var/www/html/storage /var/www/html/bootstrap/cache
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 EXPOSE 80
 
+RUN php artisan key:generate
 # 6. تشغيل المايجريشن تلقائياً ثم تشغيل السيرفر
 CMD php artisan config:clear && php artisan route:clear && php artisan migrate --force && apache2-foreground
 
