@@ -81,7 +81,7 @@ class AdminController extends Controller
         $request->validate([
             'name'                => 'sometimes|string|max:255',
             'password'            => 'nullable|string|min:6',
-            'subscription_status' => 'sometimes|in:active,inactive,expired',
+            'subscription_status' => 'sometimes|in:active,inactive,expired,trial',
             'subscription_type'   => 'nullable|string',
             'subscription_ends_at'=> 'nullable|date',
         ]);
@@ -117,6 +117,7 @@ class AdminController extends Controller
             $updates['status'] = match ($request->subscription_status) {
                 'active' => 'active',
                 'expired' => 'expired',
+                'trial' => 'active',
                 default => 'suspended',
             };
         }

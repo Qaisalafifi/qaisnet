@@ -227,7 +227,18 @@ class RouterosAPI
         $RESPONSE     = [];
         $receiveddone = false;
         while (true) {
-            $BYTE   = ord(fread($this->socket, 1));
+            $byteStr = fread($this->socket, 1);
+            if ($byteStr === '' || $byteStr === false) {
+                $meta = stream_get_meta_data($this->socket);
+                if (!empty($meta['timed_out']) || !empty($meta['eof'])) {
+                    $this->debug('>>> Read timed out or connection closed.');
+                    break;
+                }
+                usleep(1000);
+                continue;
+            }
+
+            $BYTE   = ord($byteStr);
             $LENGTH = 0;
             if ($BYTE & 128) {
                 if (($BYTE & 192) == 128) {
@@ -260,7 +271,17 @@ class RouterosAPI
                 $retlen = 0;
                 while ($retlen < $LENGTH) {
                     $toread = $LENGTH - $retlen;
-                    $_ .= fread($this->socket, $toread);
+                    $chunk = fread($this->socket, $toread);
+                    if ($chunk === '' || $chunk === false) {
+                        $meta = stream_get_meta_data($this->socket);
+                        if (!empty($meta['timed_out']) || !empty($meta['eof'])) {
+                            $this->debug('>>> Read timed out or connection closed during payload.');
+                            break 2;
+                        }
+                        usleep(1000);
+                        continue;
+                    }
+                    $_ .= $chunk;
                     $retlen = strlen($_);
                 }
                 $RESPONSE[] = $_;
@@ -272,6 +293,10 @@ class RouterosAPI
             }
 
             $STATUS = socket_get_status($this->socket);
+            if (!empty($STATUS['timed_out'])) {
+                $this->debug('>>> Socket timed out.');
+                break;
+            }
             if ($LENGTH > 0) {
                 $this->debug('>>> [' . $LENGTH . ', ' . $STATUS['unread_bytes'] . ']' . $_);
             }

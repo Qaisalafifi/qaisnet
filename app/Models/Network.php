@@ -99,9 +99,21 @@ class Network extends Model
      */
     public function isSubscriptionActive(): bool
     {
-        if (!$this->subscription_end_at) {
+        if ($this->status === 'suspended') {
             return false;
         }
-        return $this->subscription_end_at->isFuture() && $this->status === 'active';
+
+        if ($this->subscription_end_at && $this->subscription_end_at->isFuture()) {
+            return true;
+        }
+
+        $owner = $this->owner;
+        if ($owner && in_array($owner->subscription_status, ['active', 'trial'], true)) {
+            if ($owner->subscription_ends_at && $owner->subscription_ends_at->isFuture()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

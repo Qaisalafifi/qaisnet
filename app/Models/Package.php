@@ -18,6 +18,7 @@ class Package extends Model
         'data_limit',
         'validity_days',
         'mikrotik_profile_name',
+        'mikrotik_mode',
         'status',
     ];
 

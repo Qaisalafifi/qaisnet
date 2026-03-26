@@ -88,6 +88,25 @@ class NetworkController extends Controller
 
     public function store(Request $request)
     {
+        $user = $request->user();
+        if (! $user->isAdmin() && ! $user->isNetworkOwner()) {
+            return response()->json(['message' => 'غير مصرح.'], 403);
+        }
+
+        if ($user->isNetworkOwner()) {
+            if (! $user->hasFeature('add_network')) {
+                return response()->json(['message' => 'خطة التجربة لا تسمح بإضافة شبكة.'], 403);
+            }
+
+            $maxNetworks = $user->planLimit('networks_max', null);
+            if (is_numeric($maxNetworks)) {
+                $count = Network::where('owner_id', $user->id)->count();
+                if ($count >= (int) $maxNetworks) {
+                    return response()->json(['message' => 'تم الوصول للحد الأقصى من الشبكات في خطتك.'], 422);
+                }
+            }
+        }
+
         $request->validate([
             'name' => 'required|string|max:255',
             'ip_address' => 'required|ip',
@@ -101,7 +120,7 @@ class NetworkController extends Controller
 
         $network = Network::create([
             'name'                 => $request->name,
-            'owner_id'             => $request->user()->id,
+            'owner_id'             => $user->id,
             'linking_code'         => Str::upper(Str::random(8)),
             'ip_address'           => $request->ip_address,
             'api_port'             => $request->api_port ?? 8728,
@@ -171,6 +190,180 @@ class NetworkController extends Controller
         $result = $this->mikroTikService->testConnection($network);
 
         return response()->json($result);
+    }
+
+    /**
+     * Active sessions on hotspot (owner only)
+     */
+    public function activeSessions(Request $request, Network $network)
+    {
+        $user = $request->user();
+        if (! $user->isAdmin() && ! $user->isNetworkOwner()) {
+            return response()->json(['message' => 'غير مصرح.'], 403);
+        }
+        if (! $user->isAdmin() && $network->owner_id !== $user->id) {
+            return response()->json(['message' => 'غير مصرح.'], 403);
+        }
+        if ($user->isNetworkOwner() && ! $user->hasFeature('active_connections')) {
+            return response()->json(['message' => 'خطة التجربة لا تسمح بعرض المتصلين حالياً.'], 403);
+        }
+
+        $sessions = $this->mikroTikService->getActiveHotspotSessions($network);
+
+        return response()->json([
+            'count' => count($sessions),
+            'sessions' => $sessions,
+        ]);
+    }
+
+    /**
+     * Connected devices (ARP table) (owner only)
+     */
+    public function connectedDevices(Request $request, Network $network)
+    {
+        $user = $request->user();
+        if (! $user->isAdmin() && ! $user->isNetworkOwner()) {
+            return response()->json(['message' => 'غير مصرح.'], 403);
+        }
+        if (! $user->isAdmin() && $network->owner_id !== $user->id) {
+            return response()->json(['message' => 'غير مصرح.'], 403);
+        }
+        if ($user->isNetworkOwner() && ! $user->hasFeature('connected_devices')) {
+            return response()->json(['message' => 'خطة التجربة لا تسمح بعرض الأجهزة المتصلة.'], 403);
+        }
+
+        $devices = $this->mikroTikService->getConnectedDevices($network);
+
+        return response()->json([
+            'count' => count($devices),
+            'devices' => $devices,
+        ]);
+    }
+
+    /**
+     * Hotspot hosts (connected) (owner only)
+     */
+    public function hotspotHosts(Request $request, Network $network)
+    {
+        $user = $request->user();
+        if (! $user->isAdmin() && ! $user->isNetworkOwner()) {
+            return response()->json(['message' => 'غير مصرح.'], 403);
+        }
+        if (! $user->isAdmin() && $network->owner_id !== $user->id) {
+            return response()->json(['message' => 'غير مصرح.'], 403);
+        }
+        if ($user->isNetworkOwner() && ! $user->hasFeature('connected_devices')) {
+            return response()->json(['message' => 'خطة التجربة لا تسمح بعرض المتصلين حالياً.'], 403);
+        }
+
+        $hosts = $this->mikroTikService->getHotspotHosts($network);
+
+        return response()->json([
+            'count' => count($hosts),
+            'hosts' => $hosts,
+        ]);
+    }
+
+    /**
+     * Neighbor devices (owner only)
+     */
+    public function neighbors(Request $request, Network $network)
+    {
+        $user = $request->user();
+        if (! $user->isAdmin() && ! $user->isNetworkOwner()) {
+            return response()->json(['message' => 'غير مصرح.'], 403);
+        }
+        if (! $user->isAdmin() && $network->owner_id !== $user->id) {
+            return response()->json(['message' => 'غير مصرح.'], 403);
+        }
+        if ($user->isNetworkOwner() && ! $user->hasFeature('connected_devices')) {
+            return response()->json(['message' => 'خطة التجربة لا تسمح بعرض الأجهزة المتصلة.'], 403);
+        }
+
+        $neighbors = $this->mikroTikService->getNeighbors($network);
+
+        return response()->json([
+            'count' => count($neighbors),
+            'devices' => $neighbors,
+        ]);
+    }
+
+    /**
+     * Clear active sessions (owner only)
+     */
+    public function clearActiveSessions(Request $request, Network $network)
+    {
+        $user = $request->user();
+        if (! $user->isAdmin() && ! $user->isNetworkOwner()) {
+            return response()->json(['message' => 'غير مصرح.'], 403);
+        }
+        if (! $user->isAdmin() && $network->owner_id !== $user->id) {
+            return response()->json(['message' => 'غير مصرح.'], 403);
+        }
+        if ($user->isNetworkOwner() && ! $user->hasFeature('active_connections')) {
+            return response()->json(['message' => 'خطة التجربة لا تسمح بحذف النشطين.'], 403);
+        }
+
+        $result = $this->mikroTikService->clearActiveSessions($network);
+        if (!($result['success'] ?? false)) {
+            return response()->json(['message' => $result['message'] ?? 'فشل حذف النشطين'], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'removed' => $result['count'] ?? 0,
+        ]);
+    }
+
+    /**
+     * Clear hotspot hosts (owner only)
+     */
+    public function clearHotspotHosts(Request $request, Network $network)
+    {
+        $user = $request->user();
+        if (! $user->isAdmin() && ! $user->isNetworkOwner()) {
+            return response()->json(['message' => 'غير مصرح.'], 403);
+        }
+        if (! $user->isAdmin() && $network->owner_id !== $user->id) {
+            return response()->json(['message' => 'غير مصرح.'], 403);
+        }
+        if ($user->isNetworkOwner() && ! $user->hasFeature('connected_devices')) {
+            return response()->json(['message' => 'خطة التجربة لا تسمح بحذف المتصلين.'], 403);
+        }
+
+        $result = $this->mikroTikService->clearHotspotHosts($network);
+        if (!($result['success'] ?? false)) {
+            return response()->json(['message' => $result['message'] ?? 'فشل حذف المتصلين'], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'removed' => $result['count'] ?? 0,
+        ]);
+    }
+
+    /**
+     * Port/interface stats (paid only)
+     */
+    public function portStats(Request $request, Network $network)
+    {
+        $user = $request->user();
+        if (! $user->isAdmin() && ! $user->isNetworkOwner()) {
+            return response()->json(['message' => 'غير مصرح.'], 403);
+        }
+        if (! $user->isAdmin() && $network->owner_id !== $user->id) {
+            return response()->json(['message' => 'غير مصرح.'], 403);
+        }
+        if ($user->isNetworkOwner() && ! $user->hasFeature('port_stats')) {
+            return response()->json(['message' => 'هذه الميزة متاحة فقط للمشترك.'], 403);
+        }
+
+        $ports = $this->mikroTikService->getPortStats($network);
+
+        return response()->json([
+            'count' => count($ports),
+            'ports' => $ports,
+        ]);
     }
 
     public function show(Request $request, Network $network)

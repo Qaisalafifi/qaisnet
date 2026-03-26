@@ -42,11 +42,21 @@ class CardGenerationController extends Controller
             return response()->json(['message' => 'غير مصرح'], 403);
         }
 
-        // Check subscription
-        if (!$network->isSubscriptionActive()) {
-            return response()->json([
-                'message' => 'انتهت صلاحية الاشتراك. يرجى التجديد أولاً'
-            ], 422);
+        // Check subscription (trial is always allowed)
+        if (!$user->isAdmin()) {
+            if (! $user->isTrial() && ! $network->isSubscriptionActive()) {
+                return response()->json([
+                    'message' => 'انتهت صلاحية الاشتراك. يرجى التجديد أولاً'
+                ], 422);
+            }
+        }
+
+        $maxCount = 1000;
+        if ($user->isNetworkOwner()) {
+            $limit = $user->planLimit('card_generation_max', 1000);
+            if (is_numeric($limit)) {
+                $maxCount = (int) $limit;
+            }
         }
 
         $request->validate([
@@ -54,18 +64,61 @@ class CardGenerationController extends Controller
             'card_length' => 'required|integer|min:6|max:20',
             'prefix' => ['nullable', 'string', 'max:10', 'regex:/^\d*$/'],
             'suffix' => ['nullable', 'string', 'max:10', 'regex:/^\d*$/'],
-            'count' => 'required|integer|min:1|max:1000',
+            'count' => 'required|integer|min:1|max:' . $maxCount,
             'assign_to_shop_id' => 'nullable|exists:shops,id',
             'include_password' => 'sometimes|boolean',
             'password_mode' => 'sometimes|string|in:same,random',
             'password_length' => 'required_if:password_mode,random|integer|min:4|max:20',
+            'mikrotik_mode' => 'nullable|in:hotspot,user_manager,auto',
         ]);
 
+        if ($request->filled('assign_to_shop_id') && $user->isNetworkOwner() && ! $user->hasFeature('assign_cards')) {
+            return response()->json(['message' => 'خطة التجربة لا تسمح بتخصيص الكروت للبقالة.'], 403);
+        }
+
         $package = Package::findOrFail($request->package_id);
+        $mikrotikMode = $request->input('mikrotik_mode');
+        $modeExplicit = $request->filled('mikrotik_mode');
 
         // Verify package belongs to network
         if ($package->network_id !== $network->id) {
             return response()->json(['message' => 'الباقة لا تنتمي لهذه الشبكة'], 422);
+        }
+
+        // Sync packages from MikroTik to ensure profiles are up to date
+        $syncMode = $mikrotikMode ?: ($package->mikrotik_mode ?: null);
+        $profiles = $this->mikroTikService->getProfiles($network, $syncMode);
+        if (empty($profiles) && !$modeExplicit) {
+            $syncMode = 'auto';
+            $profiles = $this->mikroTikService->getProfiles($network, $syncMode);
+        }
+
+        if (empty($profiles)) {
+            $error = $this->mikroTikService->getLastError();
+            $message = $error ? ('تعذر جلب البروفايلات من الميكروتك: ' . $error) : 'لم يتم العثور على بروفايلات في MikroTik';
+            return response()->json(['message' => $message], 422);
+        }
+
+        $this->syncPackagesFromProfiles($network, $profiles, $syncMode);
+        $package->refresh();
+
+        if (!$modeExplicit && !empty($package->mikrotik_mode)) {
+            $mikrotikMode = $package->mikrotik_mode;
+        }
+
+        if ($modeExplicit && !empty($package->mikrotik_mode) && $package->mikrotik_mode !== $mikrotikMode) {
+            return response()->json([
+                'message' => 'الباقة لا تطابق نظام الكروت المختار.'
+            ], 422);
+        }
+
+        $profileNames = array_filter(array_map(function ($profile) {
+            return $profile['name'] ?? null;
+        }, $profiles));
+        if (!in_array($package->mikrotik_profile_name, $profileNames, true)) {
+            return response()->json([
+                'message' => 'بروفايل الباقة غير موجود في الميكروتك. تم تحديث الباقات، يرجى اختيار باقة صحيحة.'
+            ], 422);
         }
 
         // Fail fast if MikroTik is not reachable to avoid long timeouts
@@ -146,7 +199,8 @@ class CardGenerationController extends Controller
                     $code,
                     $password,
                     $package->mikrotik_profile_name,
-                    $package->validity_days
+                    $package->validity_days,
+                    $mikrotikMode
                 );
 
                 if (!$mikroTikSuccess) {
@@ -244,6 +298,60 @@ class CardGenerationController extends Controller
         } finally {
             $this->mikroTikService->disconnect();
         }
+    }
+
+    private function syncPackagesFromProfiles(Network $network, array $profiles, ?string $mode): void
+    {
+        foreach ($profiles as $profile) {
+            $profileName = $profile['name'] ?? null;
+            if (!is_string($profileName) || trim($profileName) === '') {
+                continue;
+            }
+
+            $resolvedMode = $this->resolveProfileMode($mode, $profile['source'] ?? null);
+
+            $package = Package::where('network_id', $network->id)
+                ->where('mikrotik_profile_name', $profileName)
+                ->first();
+
+            if ($package) {
+                if ($package->mikrotik_mode !== $resolvedMode) {
+                    $package->update(['mikrotik_mode' => $resolvedMode]);
+                }
+                continue;
+            }
+
+            Package::create([
+                'network_id' => $network->id,
+                'name' => $profileName,
+                'price' => 0,
+                'wholesale_price' => 0,
+                'retail_price' => 0,
+                'data_limit' => 'unlimited',
+                'validity_days' => 30,
+                'mikrotik_profile_name' => $profileName,
+                'mikrotik_mode' => $resolvedMode,
+                'status' => 'active',
+            ]);
+        }
+    }
+
+    private function resolveProfileMode(?string $requestedMode, ?string $source): string
+    {
+        $requestedMode = strtolower(trim((string) $requestedMode));
+        if (in_array($requestedMode, ['hotspot', 'user_manager'], true)) {
+            return $requestedMode;
+        }
+
+        $source = strtolower(trim((string) $source));
+        if ($source === 'user-manager' || $source === 'user_manager') {
+            return 'user_manager';
+        }
+        if ($source === 'hotspot') {
+            return 'hotspot';
+        }
+
+        return 'hotspot';
     }
 
     /**

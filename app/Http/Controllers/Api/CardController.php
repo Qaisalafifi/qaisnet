@@ -127,6 +127,12 @@ class CardController extends Controller
         ]);
 
         $user = $request->user();
+        if (! $user->isAdmin() && ! $user->isNetworkOwner()) {
+            return response()->json(['message' => 'غير مصرح.'], 403);
+        }
+        if ($user->isNetworkOwner() && ! $user->hasFeature('assign_cards')) {
+            return response()->json(['message' => 'خطة التجربة لا تسمح بتخصيص الكروت للبقالة.'], 403);
+        }
         $shop = Shop::findOrFail($request->shop_id);
 
         if (! $user->isAdmin()) {

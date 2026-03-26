@@ -34,7 +34,7 @@ class AuthController extends Controller
         $token = $user->createToken('api-token')->plainTextToken;
 
         return response()->json([
-            'user'  => $user,
+            'user'  => $this->withPlan($user),
             'token' => $token,
         ]);
     }
@@ -65,7 +65,46 @@ class AuthController extends Controller
 
         return response()->json([
             'message' => 'تم إنشاء الحساب بنجاح',
-            'user'    => $user,
+            'user'    => $this->withPlan($user),
+            'token'   => $token,
+        ], 201);
+    }
+
+    /**
+     * Registration for Network Owners (Trial)
+     */
+    public function registerOwner(Request $request)
+    {
+        $request->validate([
+            'name'     => 'required|string|max:255',
+            'username' => 'required|string|max:255|unique:users,username',
+            'password' => 'required|string|min:6',
+            'phone'    => 'nullable|string|max:20',
+            'email'    => 'nullable|email|unique:users,email',
+        ]);
+
+        $email = $request->email;
+        if (empty($email)) {
+            $email = $request->username . '@qaisnet.local';
+        }
+
+        $user = User::create([
+            'name'                => $request->name,
+            'username'            => $request->username,
+            'email'               => $email,
+            'password'            => Hash::make($request->password),
+            'role'                => 'network_owner',
+            'phone'               => $request->phone,
+            'subscription_status' => 'trial',
+            'subscription_ends_at'=> null,
+            'subscription_type'   => 'trial',
+        ]);
+
+        $token = $user->createToken('api-token')->plainTextToken;
+
+        return response()->json([
+            'message' => 'تم إنشاء حساب صاحب الشبكة (تجريبي) بنجاح',
+            'user'    => $this->withPlan($user),
             'token'   => $token,
         ], 201);
     }
@@ -78,7 +117,18 @@ class AuthController extends Controller
 
     public function me(Request $request)
     {
-        // Load linked networks
-        return response()->json($request->user()->load('networks'));
+        $user = $request->user()->load('networks');
+        return response()->json($this->withPlan($user));
+    }
+
+    private function withPlan(User $user): User
+    {
+        $plan = $user->planConfig();
+
+        $user->setAttribute('plan', $user->planKey());
+        $user->setAttribute('features', $plan['features'] ?? []);
+        $user->setAttribute('limits', $plan['limits'] ?? []);
+
+        return $user;
     }
 }

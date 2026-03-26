@@ -26,10 +26,17 @@ class PackageController extends Controller
     {
         $this->authorizeNetwork($request, $network);
 
-        $packages = Package::where('network_id', $network->id)
-            ->withCount(['cards as available_cards' => function($q) {
-                $q->where('status', 'available');
-            }])
+        $query = Package::where('network_id', $network->id);
+        if ($request->filled('mikrotik_mode')) {
+            $mode = $request->mikrotik_mode;
+            if (in_array($mode, ['hotspot', 'user_manager'], true)) {
+                $query->where('mikrotik_mode', $mode);
+            }
+        }
+
+        $packages = $query->withCount(['cards as available_cards' => function($q) {
+            $q->where('status', 'available');
+        }])
             ->latest()
             ->get();
 
@@ -57,6 +64,7 @@ class PackageController extends Controller
             'data_limit' => 'required|string',
             'validity_days' => 'required|integer|min:1',
             'mikrotik_profile_name' => 'required|string',
+            'mikrotik_mode' => 'nullable|in:hotspot,user_manager',
         ]);
 
         $package = Package::create([
@@ -68,6 +76,7 @@ class PackageController extends Controller
             'data_limit' => $request->data_limit,
             'validity_days' => $request->validity_days,
             'mikrotik_profile_name' => $request->mikrotik_profile_name,
+            'mikrotik_mode' => $request->input('mikrotik_mode', 'hotspot'),
             'status' => 'active',
         ]);
 
@@ -95,6 +104,7 @@ class PackageController extends Controller
             'data_limit' => 'sometimes|string',
             'validity_days' => 'sometimes|integer|min:1',
             'mikrotik_profile_name' => 'sometimes|string',
+            'mikrotik_mode' => 'sometimes|in:hotspot,user_manager',
             'status' => 'sometimes|in:active,inactive',
         ]);
 
@@ -105,6 +115,7 @@ class PackageController extends Controller
             'data_limit',
             'validity_days',
             'mikrotik_profile_name',
+            'mikrotik_mode',
             'status',
         ]);
         if ($request->filled('retail_price')) {
@@ -143,7 +154,12 @@ class PackageController extends Controller
         $this->authorizeNetwork($request, $network);
 
         try {
-            $profiles = $this->mikroTikService->getProfiles($network);
+            $request->validate([
+                'mikrotik_mode' => 'nullable|in:hotspot,user_manager,auto',
+            ]);
+            $mode = $request->input('mikrotik_mode', 'hotspot');
+
+            $profiles = $this->mikroTikService->getProfiles($network, $mode);
 
             if (empty($profiles)) {
                 return response()->json([
@@ -159,6 +175,7 @@ class PackageController extends Controller
                         [
                             'network_id' => $network->id,
                             'mikrotik_profile_name' => $profile['name'],
+                            'mikrotik_mode' => $mode,
                         ],
                         [
                             'name' => $profile['name'],
@@ -167,6 +184,7 @@ class PackageController extends Controller
                             'retail_price' => 0,
                             'data_limit' => 'unlimited',
                             'validity_days' => 30,
+                            'mikrotik_mode' => $mode,
                             'status' => 'active',
                         ]
                     );

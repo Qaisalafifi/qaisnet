@@ -7,6 +7,10 @@ Route::get('/', function () {
     return view('welcome');
 });
 
+Route::get('/owner-dashboard', function () {
+    return view('owner-dashboard');
+});
+
 Route::get('/storage-proxy/{path}', function ($path) {
     if (!Storage::disk('public')->exists($path)) {
         abort(404);

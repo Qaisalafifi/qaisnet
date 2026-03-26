@@ -35,4 +35,9 @@ return [
         ],
     ],
 
+    'mikrotik' => [
+        // hotspot | user_manager | auto
+        'mode' => env('MIKROTIK_MODE', 'hotspot'),
+    ],
+
 ];

@@ -7,11 +7,15 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CardController;
 use App\Http\Controllers\Api\CardGenerationController;
 use App\Http\Controllers\Api\CardTemplateController;
+use App\Http\Controllers\Api\HotspotUserController;
+use App\Http\Controllers\Api\HotspotScriptController;
 use App\Http\Controllers\Api\NetworkController;
 use App\Http\Controllers\Api\PackageController;
 use App\Http\Controllers\Api\SaleController;
 use App\Http\Controllers\Api\ShopController;
 use App\Http\Controllers\Api\ShopNetworkController;
+use App\Http\Controllers\Api\SubscriptionRequestController;
+use App\Http\Controllers\Api\UserManagerUserController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/refresh', function() {
@@ -22,6 +26,7 @@ Route::get('/refresh', function() {
 // ── Auth ───────────────────────────────────────────────────────────────────
 Route::post('/login',    [AuthController::class, 'login']);
 Route::post('/register', [AuthController::class, 'register']);
+Route::post('/register-owner', [AuthController::class, 'registerOwner']);
 
 // ── Protected routes ───────────────────────────────────────────────────────
 Route::middleware('auth:sanctum')->group(function () {
@@ -36,6 +41,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/users',          [AdminController::class, 'storeUser']);
         Route::put('/users/{user}',    [AdminController::class, 'updateUser']);
         Route::delete('/users/{user}', [AdminController::class, 'deleteUser']);
+        
+        // Subscription requests
+        Route::get('/subscription-requests', [SubscriptionRequestController::class, 'index']);
+        Route::put('/subscription-requests/{subscriptionRequest}/approve', [SubscriptionRequestController::class, 'approve']);
+        Route::put('/subscription-requests/{subscriptionRequest}/reject', [SubscriptionRequestController::class, 'reject']);
         
         // Admin network management
         Route::get('/networks', [NetworkController::class, 'index']);
@@ -59,6 +69,31 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/networks/{network}', [NetworkController::class, 'update']);
         Route::delete('/networks/{network}', [NetworkController::class, 'destroy']);
         Route::post('/networks/{network}/test-connection', [NetworkController::class, 'testConnection']);
+        Route::get('/networks/{network}/active-sessions', [NetworkController::class, 'activeSessions']);
+        Route::delete('/networks/{network}/active-sessions', [NetworkController::class, 'clearActiveSessions']);
+        Route::get('/networks/{network}/connected-devices', [NetworkController::class, 'connectedDevices']);
+        Route::get('/networks/{network}/hotspot-hosts', [NetworkController::class, 'hotspotHosts']);
+        Route::get('/networks/{network}/neighbors', [NetworkController::class, 'neighbors']);
+        Route::delete('/networks/{network}/hotspot-hosts', [NetworkController::class, 'clearHotspotHosts']);
+        Route::get('/networks/{network}/port-stats', [NetworkController::class, 'portStats']);
+        Route::post('/networks/{network}/hotspot-scripts', [HotspotScriptController::class, 'install']);
+
+        // Hotspot users
+        Route::get('/networks/{network}/hotspot-users', [HotspotUserController::class, 'index']);
+        Route::post('/networks/{network}/hotspot-users', [HotspotUserController::class, 'store']);
+        Route::put('/networks/{network}/hotspot-users/{userId}', [HotspotUserController::class, 'update']);
+        Route::delete('/networks/{network}/hotspot-users/{userId}', [HotspotUserController::class, 'destroy']);
+        Route::post('/networks/{network}/hotspot-users/{userId}/reset-counters', [HotspotUserController::class, 'resetCounters']);
+        Route::post('/networks/{network}/hotspot-users/{userId}/disable', [HotspotUserController::class, 'disable']);
+        Route::post('/networks/{network}/hotspot-users/{userId}/enable', [HotspotUserController::class, 'enable']);
+        Route::post('/networks/{network}/hotspot-users/{userId}/shared-users', [HotspotUserController::class, 'setSharedUsers']);
+
+        // User Manager users
+        Route::get('/networks/{network}/user-manager-users', [UserManagerUserController::class, 'index']);
+
+        // Subscription requests (owner)
+        Route::get('/subscription-requests', [SubscriptionRequestController::class, 'myRequests']);
+        Route::post('/subscription-requests', [SubscriptionRequestController::class, 'store']);
         
         // Packages
         Route::get('/networks/{network}/packages', [PackageController::class, 'index']);
