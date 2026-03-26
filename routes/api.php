@@ -119,3 +119,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/sales', [SaleController::class, 'index']);
 
 });
+Route::get('/run-seed', function () {
+    try {
+        Artisan::call('db:seed', ['--force' => true]);
+        return "تمت إضافة البيانات بنجاح في قاعدة البيانات!";
+    } catch (\Exception $e) {
+        return "حدث خطأ: " . $e->getMessage();
+    }
+});
