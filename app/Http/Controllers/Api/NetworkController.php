@@ -109,7 +109,7 @@ class NetworkController extends Controller
 
         $request->validate([
             'name' => 'required|string|max:255',
-            'ip_address' => 'required|ip',
+            'ip_address' => ['required', 'string', 'max:255', $this->ipOrHostRule()],
             'api_port' => 'nullable|integer|min:1|max:65535',
             'mikrotik_user' => 'required|string',
             'mikrotik_password' => 'required|string',
@@ -144,7 +144,7 @@ class NetworkController extends Controller
 
         $request->validate([
             'name' => 'sometimes|string|max:255',
-            'ip_address' => 'sometimes|ip',
+            'ip_address' => ['sometimes', 'string', 'max:255', $this->ipOrHostRule()],
             'api_port' => 'sometimes|integer|min:1|max:65535',
             'mikrotik_user' => 'sometimes|string',
             'mikrotik_password' => 'sometimes|string',
@@ -445,5 +445,21 @@ class NetworkController extends Controller
         } elseif (!$user->isAdmin() && $network->owner_id !== $user->id) {
             abort(403, 'غير مصرح.');
         }
+    }
+
+    private function ipOrHostRule(): \Closure
+    {
+        return function ($attribute, $value, $fail) {
+            if (filter_var($value, FILTER_VALIDATE_IP)) {
+                return;
+            }
+
+            $pattern = '/^(?=.{1,253}$)(?!-)[A-Za-z0-9-]{1,63}(?<!-)'
+                . '(?:\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*$/';
+
+            if (!is_string($value) || !preg_match($pattern, $value)) {
+                $fail('الرجاء إدخال IP صحيح أو DNS صالح.');
+            }
+        };
     }
 }
