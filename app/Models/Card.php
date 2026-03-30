@@ -18,6 +18,11 @@ class Card extends Model
         'generated_batch_id',
         'assigned_shop_id',
         'sold_at',
+        'serial_number',
+        'category',
+        'data_amount',
+        'duration',
+        'price',
     ];
 
     protected $casts = [

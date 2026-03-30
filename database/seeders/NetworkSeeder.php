@@ -45,9 +45,12 @@ class NetworkSeeder extends Seeder
         // Add some cards to both
         foreach ([$n1, $n2] as $net) {
             for ($i = 0; $i < 10; $i++) {
+                $code = Str::upper(Str::random(12));
                 Card::create([
                     'network_id' => $net->id,
-                    'serial_number' => Str::upper(Str::random(12)),
+                    'code' => $code,
+                    'password' => $code,
+                    'serial_number' => $code,
                     'category' => [200, 500, 1000][rand(0, 2)],
                     'data_amount' => [1, 2, 5][rand(0, 2)] . ' GB',
                     'duration' => ['يوم', 'أسبوع', 'شهر'][rand(0, 2)],

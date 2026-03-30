@@ -31,10 +31,13 @@ class DemoDataSeeder extends Seeder
 
         // Create some cards
         for ($i = 0; $i < 20; $i++) {
+            $code = Str::upper(Str::random(10));
             Card::create([
                 'network_id' => $network->id,
                 'assigned_shop_id' => $shop->id,
-                'serial_number' => 'SN-' . Str::upper(Str::random(10)),
+                'code' => $code,
+                'password' => $code,
+                'serial_number' => 'SN-' . $code,
                 'category' => [200, 500, 1000][rand(0, 2)],
                 'data_amount' => rand(1, 10) . ' GB',
                 'duration' => rand(1, 30) . ' days',
