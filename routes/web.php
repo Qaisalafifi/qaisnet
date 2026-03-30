@@ -35,3 +35,32 @@ Route::get('/run-migrate', function () {
     }
 });
 
+Route::get('/run-migrate', function (Request $request) {
+    $token = $request->query('token');
+    $serverToken = env('MAINTENANCE_TOKEN');
+    if (!$serverToken || !$token || !hash_equals($serverToken, $token)) {
+        abort(403, 'غير مصرح');
+    }
+
+    try {
+        Artisan::call('migrate --force');
+        return "تم رفع الجداول بنجاح: <br><pre>" . Artisan::output() . "</pre>";
+    } catch (\Exception $e) {
+        return "فشل رفع الجداول: " . $e->getMessage();
+    }
+});
+
+Route::get('/run-storage-link', function (Request $request) {
+    $token = $request->query('token');
+    $serverToken = env('MAINTENANCE_TOKEN');
+    if (!$serverToken || !$token || !hash_equals($serverToken, $token)) {
+        abort(403, 'غير مصرح');
+    }
+
+    try {
+        Artisan::call('storage:link');
+        return "تم تفعيل storage:link بنجاح: <br><pre>" . Artisan::output() . "</pre>";
+    } catch (\Exception $e) {
+        return "فشل تفعيل storage:link: " . $e->getMessage();
+    }
+});
