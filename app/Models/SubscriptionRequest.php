@@ -13,6 +13,9 @@ class SubscriptionRequest extends Model
         'user_id',
         'status',
         'requested_plan',
+        'plan_id',
+        'payment_method_id',
+        'receipt_path',
         'message',
         'admin_note',
         'handled_by',
@@ -26,5 +29,15 @@ class SubscriptionRequest extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function paymentMethod()
+    {
+        return $this->belongsTo(PaymentMethod::class);
+    }
+
+    public function plan()
+    {
+        return $this->belongsTo(SubscriptionPlan::class, 'plan_id');
     }
 }

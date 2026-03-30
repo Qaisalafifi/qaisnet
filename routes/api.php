@@ -11,9 +11,11 @@ use App\Http\Controllers\Api\HotspotUserController;
 use App\Http\Controllers\Api\HotspotScriptController;
 use App\Http\Controllers\Api\NetworkController;
 use App\Http\Controllers\Api\PackageController;
+use App\Http\Controllers\Api\PaymentMethodController;
 use App\Http\Controllers\Api\SaleController;
 use App\Http\Controllers\Api\ShopController;
 use App\Http\Controllers\Api\ShopNetworkController;
+use App\Http\Controllers\Api\SubscriptionPlanController;
 use App\Http\Controllers\Api\SubscriptionRequestController;
 use App\Http\Controllers\Api\UserManagerUserController;
 use Illuminate\Support\Facades\Route;
@@ -56,6 +58,23 @@ Route::middleware('auth:sanctum')->group(function () {
         // Admin subscriptions
         Route::get('/subscriptions', [AdminController::class, 'subscriptions']);
         Route::post('/networks/{network}/renew', [AdminController::class, 'renewSubscription']);
+
+        // Payment methods
+        Route::get('/payment-methods', [PaymentMethodController::class, 'index']);
+        Route::post('/payment-methods', [PaymentMethodController::class, 'store']);
+        Route::put('/payment-methods/{paymentMethod}', [PaymentMethodController::class, 'update']);
+        Route::delete('/payment-methods/{paymentMethod}', [PaymentMethodController::class, 'destroy']);
+
+        // Subscription plans
+        Route::get('/subscription-plans', [SubscriptionPlanController::class, 'index']);
+        Route::post('/subscription-plans', [SubscriptionPlanController::class, 'store']);
+        Route::put('/subscription-plans/{subscriptionPlan}', [SubscriptionPlanController::class, 'update']);
+        Route::delete('/subscription-plans/{subscriptionPlan}', [SubscriptionPlanController::class, 'destroy']);
+
+        // Admin shops management
+        Route::get('/shops', [ShopController::class, 'index']);
+        Route::put('/shops/{shop}', [ShopController::class, 'update']);
+        Route::delete('/shops/{shop}', [ShopController::class, 'destroy']);
     });
 
     // ── Network Owner Routes ──────────────────────────────────────────────
@@ -94,6 +113,10 @@ Route::middleware('auth:sanctum')->group(function () {
         // Subscription requests (owner)
         Route::get('/subscription-requests', [SubscriptionRequestController::class, 'myRequests']);
         Route::post('/subscription-requests', [SubscriptionRequestController::class, 'store']);
+
+        // Billing (owner)
+        Route::get('/payment-methods', [PaymentMethodController::class, 'index']);
+        Route::get('/subscription-plans', [SubscriptionPlanController::class, 'index']);
         
         // Packages
         Route::get('/networks/{network}/packages', [PackageController::class, 'index']);

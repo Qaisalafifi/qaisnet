@@ -44,7 +44,11 @@ class NetworkController extends Controller
         $user = $request->user();
 
         if ($user->isAdmin()) {
-            $networks = Network::with('owner')->withCount('cards')->get();
+            $query = Network::with('owner')->withCount('cards');
+            if ($request->filled('owner_id')) {
+                $query->where('owner_id', (int) $request->owner_id);
+            }
+            $networks = $query->get();
         } elseif ($user->isShop()) {
             $networks = $user->networks()->with('owner')->withCount('cards')->get();
         } else {

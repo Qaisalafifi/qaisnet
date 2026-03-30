@@ -126,8 +126,14 @@ class AuthController extends Controller
         $plan = $user->planConfig();
 
         $user->setAttribute('plan', $user->planKey());
-        $user->setAttribute('features', $plan['features'] ?? []);
-        $user->setAttribute('limits', $plan['limits'] ?? []);
+        $features = $plan['features'] ?? [];
+        $limits = $plan['limits'] ?? [];
+        if ($user->isNetworkOwner() && $user->networks_max !== null) {
+            $limits['networks_max'] = $user->networks_max;
+        }
+
+        $user->setAttribute('features', $features);
+        $user->setAttribute('limits', $limits);
 
         return $user;
     }

@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Network;
+use App\Models\PaymentMethod;
+use App\Models\SubscriptionPlan;
 use App\Models\SubscriptionRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -23,7 +25,27 @@ class SubscriptionRequestController extends Controller
 
         $request->validate([
             'message' => 'nullable|string|max:1000',
+            'plan_id' => 'required|exists:subscription_plans,id',
+            'payment_method_id' => 'required|exists:payment_methods,id',
+            'receipt' => 'required|file|mimes:jpg,jpeg,png,pdf|max:8192',
         ]);
+
+        $plan = SubscriptionPlan::where('id', $request->plan_id)->where('is_active', true)->first();
+        if (!$plan) {
+            return response()->json(['message' => 'خطة الاشتراك غير متاحة حالياً.'], 422);
+        }
+
+        $paymentMethod = PaymentMethod::where('id', $request->payment_method_id)
+            ->where('is_active', true)
+            ->first();
+        if (!$paymentMethod) {
+            return response()->json(['message' => 'طريقة الدفع غير متاحة حالياً.'], 422);
+        }
+
+        $receiptPath = null;
+        if ($request->hasFile('receipt')) {
+            $receiptPath = $request->file('receipt')->store('receipts', 'public');
+        }
 
         $existing = SubscriptionRequest::where('user_id', $user->id)
             ->where('status', 'pending')
@@ -39,14 +61,21 @@ class SubscriptionRequestController extends Controller
         $subscriptionRequest = SubscriptionRequest::create([
             'user_id' => $user->id,
             'status' => 'pending',
-            'requested_plan' => 'paid',
+            'requested_plan' => $plan->code,
+            'plan_id' => $plan->id,
+            'payment_method_id' => $paymentMethod->id,
+            'receipt_path' => $receiptPath,
             'message' => $request->message,
         ]);
+
+        $subscriptionRequest->load(['paymentMethod', 'plan']);
+        $payload = $subscriptionRequest->toArray();
+        $payload['receipt_url'] = $this->buildReceiptUrl($request, $receiptPath);
 
         return response()->json([
             'success' => true,
             'message' => 'تم إرسال طلب الاشتراك بنجاح',
-            'data' => $subscriptionRequest,
+            'data' => $payload,
         ], 201);
     }
 
@@ -58,26 +87,35 @@ class SubscriptionRequestController extends Controller
         }
 
         $requests = SubscriptionRequest::where('user_id', $user->id)
+            ->with(['paymentMethod', 'plan'])
             ->latest()
             ->get();
 
         return response()->json([
             'success' => true,
-            'data' => $requests,
+            'data' => $requests->map(function ($req) use ($request) {
+                $data = $req->toArray();
+                $data['receipt_url'] = $this->buildReceiptUrl($request, $req->receipt_path);
+                return $data;
+            }),
         ]);
     }
 
     public function index(Request $request)
     {
         $status = $request->query('status');
-        $query = SubscriptionRequest::with('user')->latest();
+        $query = SubscriptionRequest::with(['user', 'paymentMethod', 'plan'])->latest();
         if ($status) {
             $query->where('status', $status);
         }
 
         return response()->json([
             'success' => true,
-            'data' => $query->get(),
+            'data' => $query->get()->map(function ($req) use ($request) {
+                $data = $req->toArray();
+                $data['receipt_url'] = $this->buildReceiptUrl($request, $req->receipt_path);
+                return $data;
+            }),
         ]);
     }
 
@@ -90,18 +128,30 @@ class SubscriptionRequestController extends Controller
         $request->validate([
             'admin_note' => 'nullable|string|max:1000',
             'subscription_ends_at' => 'nullable|date',
+            'plan_id' => 'nullable|exists:subscription_plans,id',
         ]);
 
         $admin = $request->user();
         $user = $subscriptionRequest->user;
 
-        $endAt = $request->filled('subscription_ends_at')
-            ? Carbon::parse($request->subscription_ends_at)
-            : now()->addDays(30);
+        $plan = null;
+        if ($request->filled('plan_id')) {
+            $plan = SubscriptionPlan::find($request->plan_id);
+        } elseif ($subscriptionRequest->plan_id) {
+            $plan = $subscriptionRequest->plan;
+        }
+
+        if ($request->filled('subscription_ends_at')) {
+            $endAt = Carbon::parse($request->subscription_ends_at);
+        } elseif ($plan) {
+            $endAt = now()->addDays((int) ($plan->duration_days ?? 30));
+        } else {
+            $endAt = now()->addDays(30);
+        }
 
         $user->update([
             'subscription_status' => 'active',
-            'subscription_type' => 'paid',
+            'subscription_type' => $plan?->code ?? 'paid',
             'subscription_ends_at' => $endAt,
         ]);
 
@@ -115,12 +165,13 @@ class SubscriptionRequestController extends Controller
             'admin_note' => $request->admin_note,
             'handled_by' => $admin->id,
             'handled_at' => now(),
+            'plan_id' => $plan?->id ?? $subscriptionRequest->plan_id,
         ]);
 
         return response()->json([
             'success' => true,
             'message' => 'تمت الموافقة على الطلب',
-            'data' => $subscriptionRequest->fresh(),
+            'data' => $subscriptionRequest->fresh()->load(['paymentMethod', 'plan']),
         ]);
     }
 
@@ -147,5 +198,20 @@ class SubscriptionRequestController extends Controller
             'message' => 'تم رفض الطلب',
             'data' => $subscriptionRequest->fresh(),
         ]);
+    }
+
+    private function buildReceiptUrl(Request $request, ?string $path): ?string
+    {
+        if (!$path) {
+            return null;
+        }
+
+        $base = rtrim($request->getSchemeAndHttpHost(), '/');
+        $normalized = ltrim($path, '/');
+        if (strpos($normalized, 'storage/') !== 0) {
+            $normalized = 'storage/' . $normalized;
+        }
+
+        return $base . '/' . $normalized;
     }
 }

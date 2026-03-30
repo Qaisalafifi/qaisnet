@@ -42,6 +42,16 @@ class ShopController extends Controller
             $query->where('network_id', $networkId);
         }
 
+        if ($user->isAdmin() && $request->filled('owner_id')) {
+            $ownerId = (int) $request->owner_id;
+            $query->where(function ($q) use ($ownerId) {
+                $q->where('network_owner_id', $ownerId)
+                  ->orWhereHas('network', function ($q2) use ($ownerId) {
+                      $q2->where('owner_id', $ownerId);
+                  });
+            });
+        }
+
         return response()->json($query->get());
     }
 

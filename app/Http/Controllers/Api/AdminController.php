@@ -43,7 +43,9 @@ class AdminController extends Controller
             });
         }
 
-        return response()->json($query->withCount('ownedNetworks')->latest()->paginate(20));
+        return response()->json(
+            $query->withCount(['ownedNetworks', 'networkShops'])->latest()->paginate(20)
+        );
     }
 
     public function storeUser(Request $request)
@@ -55,6 +57,7 @@ class AdminController extends Controller
             'role'     => 'required|in:admin,network_owner,shop',
             'phone'    => 'nullable|string',
             'email'    => 'nullable|email|unique:users,email',
+            'networks_max' => 'nullable|integer|min:0',
         ]);
 
         $email = $request->email;
@@ -71,6 +74,7 @@ class AdminController extends Controller
             'phone'               => $request->phone,
             'subscription_status' => 'active',
             'subscription_ends_at'=> now()->addMonth(),
+            'networks_max'        => $request->networks_max,
         ]);
 
         return response()->json(['message' => 'تم إنشاء المستخدم بنجاح', 'user' => $user], 201);
@@ -84,9 +88,10 @@ class AdminController extends Controller
             'subscription_status' => 'sometimes|in:active,inactive,expired,trial',
             'subscription_type'   => 'nullable|string',
             'subscription_ends_at'=> 'nullable|date',
+            'networks_max'        => 'nullable|integer|min:0',
         ]);
 
-        $data = $request->only('name', 'subscription_status', 'subscription_type', 'subscription_ends_at');
+        $data = $request->only('name', 'subscription_status', 'subscription_type', 'subscription_ends_at', 'networks_max');
         if ($request->filled('password')) {
             $data['password'] = Hash::make($request->password);
         }

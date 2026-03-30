@@ -22,6 +22,7 @@ class User extends Authenticatable
         'subscription_status',
         'subscription_ends_at',
         'subscription_type',
+        'networks_max',
     ];
 
     protected $hidden = [
@@ -112,6 +113,9 @@ class User extends Authenticatable
 
     public function planLimit(string $key, $default = null)
     {
+        if ($this->isNetworkOwner() && $key === 'networks_max' && $this->networks_max !== null) {
+            return $this->networks_max;
+        }
         return data_get($this->planConfig(), 'limits.' . $key, $default);
     }
 
@@ -138,6 +142,14 @@ class User extends Authenticatable
     public function shops()
     {
         return $this->hasMany(Shop::class, 'owner_id');
+    }
+
+    /**
+     * Shops created by this network owner (if network_owner)
+     */
+    public function networkShops()
+    {
+        return $this->hasMany(Shop::class, 'network_owner_id');
     }
 
     public function subscriptionRequests()

@@ -38,5 +38,5 @@ EXPOSE 80
 # 6. تشغيل المايجريشن تلقائياً ثم تشغيل السيرفر
 
 # السطر الأخير في ملف Dockerfile
-CMD php artisan config:clear && php artisan route:clear && php artisan migrate --force --seed && apache2-foreground
+CMD php artisan config:clear && php artisan route:clear && php artisan storage:link || true && php artisan migrate --force --seed && apache2-foreground
 

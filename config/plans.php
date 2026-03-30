@@ -5,11 +5,11 @@ return [
         'label' => 'نسخة تجريبية',
         'limits' => [
             'card_generation_max' => 100,
-            // Set to 0 to block adding networks entirely, or 1 to allow a single network.
-            'networks_max' => 0,
+            // Allow a single network during trial.
+            'networks_max' => 1,
         ],
         'features' => [
-            'add_network' => false,
+            'add_network' => true,
             'add_shop' => false,
             'assign_cards' => false,
             'active_connections' => true,
