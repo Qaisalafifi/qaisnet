@@ -17,6 +17,8 @@ class Network extends Model
         'api_port',
         'mikrotik_user',
         'mikrotik_password',
+        'mikrotik_mode',
+        'user_manager_customer',
         'subscription_type',
         'subscription_start_at',
         'subscription_end_at',

@@ -104,6 +104,7 @@ Route::middleware('auth:sanctum')->group(function () {
         
         // Card Generation
         Route::post('/networks/{network}/cards/generate', [CardGenerationController::class, 'generate']);
+        Route::post('/networks/{network}/cards/import', [CardGenerationController::class, 'importFromClient']);
         Route::get('/card-batches/{batch}/download', [CardGenerationController::class, 'downloadCards']);
         Route::get('/card-batches/{batch}/print', [CardGenerationController::class, 'printCards']);
 

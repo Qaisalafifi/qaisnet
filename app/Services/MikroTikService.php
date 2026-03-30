@@ -91,6 +91,46 @@ class MikroTikService
     }
 
     /**
+     * Get RouterOS version
+     */
+    public function getRouterOSVersion(Network $network): ?string
+    {
+        try {
+            if (!$this->connect($network)) {
+                return null;
+            }
+
+            $response = $this->api->comm('/system/resource/print', []);
+            $this->disconnect();
+
+            if (isset($response[0]['version'])) {
+                return $response[0]['version'];
+            }
+
+            return null;
+        } catch (Exception $e) {
+            Log::error('MikroTik Get Version Error', [
+                'network_id' => $network->id,
+                'error' => $e->getMessage(),
+            ]);
+            $this->disconnect();
+            return null;
+        }
+    }
+
+    /**
+     * Check if RouterOS is v7 or higher
+     */
+    public function isV7(Network $network): bool
+    {
+        $version = $this->getRouterOSVersion($network);
+        if (!$version) {
+            return false;
+        }
+        return version_compare($version, '7.0', '>=');
+    }
+
+    /**
      * Get all profiles from MikroTik (for Hotspot)
      */
     public function getProfiles(Network $network, ?string $mode = null): array
@@ -102,12 +142,12 @@ class MikroTikService
 
             $mode = $this->resolveMode($mode);
             if ($mode === 'user_manager') {
-                $profiles = $this->fetchUserManagerProfiles();
+                $profiles = $this->fetchUserManagerProfiles($network);
             } elseif ($mode === 'hotspot') {
                 $profiles = $this->fetchHotspotProfiles();
             } else {
                 // auto: Prefer User Manager profiles (matches public/profile.php)
-                $profiles = $this->fetchUserManagerProfiles();
+                $profiles = $this->fetchUserManagerProfiles($network);
                 if (empty($profiles)) {
                     // Fallback to Hotspot profiles
                     $profiles = $this->fetchHotspotProfiles();
@@ -256,9 +296,13 @@ class MikroTikService
                 throw new Exception('Cannot connect to MikroTik');
             }
 
-            $response = $this->api->comm('/tool/user-manager/user/print', [
-                '?customer' => $network->mikrotik_user,
-            ]);
+            $customer = $this->getUserManagerCustomer($network);
+            $path = $this->getUserManagerPath($network);
+            $params = [];
+            if (!$this->isV7($network)) {
+                $params['?customer'] = $customer;
+            }
+            $response = $this->api->comm($path . '/user/print', $params);
             if ($this->isTrapResponse($response)) {
                 $msg = $this->extractTrapMessage($response) ?? 'Failed to fetch user manager users';
                 throw new Exception($msg);
@@ -913,15 +957,27 @@ ROS;
 
     private function createUserManagerUser(Network $network, string $username, string $password, string $profile): bool
     {
-        $params = [
-            'customer' => $network->mikrotik_user,
-            'username' => $username,
-        ];
+        $path = $this->getUserManagerPath($network);
+        $isV7 = $this->isV7($network);
+        $customer = $this->getUserManagerCustomer($network);
+
+        if (!$isV7 && $customer === '') {
+            throw new Exception('اسم عميل User Manager غير صحيح.');
+        }
+
+        $params = [];
+        if ($isV7) {
+            $params['name'] = $username;
+        } else {
+            $params['customer'] = $customer;
+            $params['username'] = $username;
+        }
+
         if ($password !== '') {
             $params['password'] = $password;
         }
 
-        $response = $this->api->comm('/tool/user-manager/user/add', $params);
+        $response = $this->api->comm($path . '/user/add', $params);
 
         $trapMessage = $this->extractTrapMessage($response);
         if ($trapMessage !== null) {
@@ -935,12 +991,21 @@ ROS;
             throw new Exception($trapMessage);
         }
 
-        $response = $this->api->comm('/tool/user-manager/user/create-and-activate-profile', [
-            'customer' => $network->mikrotik_user,
-            'profile' => $profile,
-            'numbers' => $username,
-        ]);
-        $this->ensureNoTrap($response, 'Failed to create and activate profile');
+        if ($isV7) {
+            // V7: Add user-profile
+            $response = $this->api->comm($path . '/user-profile/add', [
+                'user' => $username,
+                'profile' => $profile,
+            ]);
+        } else {
+            // V6: create-and-activate-profile
+            $response = $this->api->comm($path . '/user/create-and-activate-profile', [
+                'customer' => $customer,
+                'profile' => $profile,
+                'numbers' => $username,
+            ]);
+        }
+        $this->ensureNoTrap($response, 'Failed to activate profile');
 
         return true;
     }
@@ -963,9 +1028,10 @@ ROS;
 
     private function removeUserManagerUser(Network $network, string $username): ?bool
     {
+        $customer = $this->getUserManagerCustomer($network);
         $response = $this->api->comm('/tool/user-manager/user/print', [
             '?username' => $username,
-            '?customer' => $network->mikrotik_user,
+            '?customer' => $customer,
         ]);
 
         $trapMessage = $this->extractTrapMessage($response);
@@ -1119,9 +1185,24 @@ ROS;
         return $mode;
     }
 
-    private function fetchUserManagerProfiles(): array
+    private function getUserManagerCustomer(Network $network): string
     {
-        $response = $this->api->comm('/tool/user-manager/profile/print', []);
+        $customer = trim((string) ($network->user_manager_customer ?? ''));
+        if ($customer === '') {
+            $customer = trim((string) ($network->mikrotik_user ?? ''));
+        }
+        return $customer;
+    }
+
+    private function getUserManagerPath(Network $network): string
+    {
+        return $this->isV7($network) ? '/user-manager' : '/tool/user-manager';
+    }
+
+    private function fetchUserManagerProfiles(Network $network): array
+    {
+        $path = $this->getUserManagerPath($network);
+        $response = $this->api->comm($path . '/profile/print', []);
         if ($this->isTrapResponse($response)) {
             return [];
         }

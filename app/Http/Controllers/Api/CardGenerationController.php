@@ -300,6 +300,166 @@ class CardGenerationController extends Controller
         }
     }
 
+    /**
+     * Import cards generated on client (direct MikroTik) and store in DB
+     */
+    public function importFromClient(Request $request, Network $network)
+    {
+        $user = $request->user();
+
+        if (!$user->isAdmin() && $network->owner_id !== $user->id) {
+            return response()->json(['message' => 'غير مصرح'], 403);
+        }
+
+        if (!$user->isAdmin()) {
+            if (! $user->isTrial() && ! $network->isSubscriptionActive()) {
+                return response()->json([
+                    'message' => 'انتهت صلاحية الاشتراك. يرجى التجديد أولاً'
+                ], 422);
+            }
+        }
+
+        $maxCount = 1000;
+        if ($user->isNetworkOwner()) {
+            $limit = $user->planLimit('card_generation_max', 1000);
+            if (is_numeric($limit)) {
+                $maxCount = (int) $limit;
+            }
+        }
+
+        $request->validate([
+            'package_id' => 'required|exists:packages,id',
+            'cards' => 'required|array|min:1|max:' . $maxCount,
+            'cards.*.code' => 'required|string|max:64',
+            'cards.*.password' => 'nullable|string|max:64',
+            'assign_to_shop_id' => 'nullable|exists:shops,id',
+            'card_length' => 'nullable|integer|min:4|max:20',
+            'prefix' => ['nullable', 'string', 'max:10', 'regex:/^\d*$/'],
+            'suffix' => ['nullable', 'string', 'max:10', 'regex:/^\d*$/'],
+        ]);
+
+        if ($request->filled('assign_to_shop_id') && $user->isNetworkOwner() && ! $user->hasFeature('assign_cards')) {
+            return response()->json(['message' => 'خطة التجربة لا تسمح بتخصيص الكروت للبقالة.'], 403);
+        }
+
+        $package = Package::findOrFail($request->package_id);
+        if ($package->network_id !== $network->id) {
+            return response()->json(['message' => 'الباقة لا تنتمي لهذه الشبكة'], 422);
+        }
+
+        $assignShopId = $request->input('assign_to_shop_id');
+        if ($assignShopId) {
+            $shop = Shop::findOrFail($assignShopId);
+            if (!$user->isAdmin() && $shop->network_id !== $network->id) {
+                return response()->json(['message' => 'غير مصرح'], 403);
+            }
+        }
+
+        $cardsInput = $request->input('cards', []);
+        $codes = array_values(array_unique(array_map(function ($item) {
+            return trim((string) ($item['code'] ?? ''));
+        }, $cardsInput)));
+
+        $existing = Card::where('network_id', $network->id)
+            ->whereIn('code', $codes)
+            ->pluck('code')
+            ->all();
+        $existingSet = array_flip($existing);
+
+        $firstCode = null;
+        $lastCode = null;
+        $stored = 0;
+        $skipped = 0;
+
+        DB::beginTransaction();
+        try {
+            $batch = CardBatch::create([
+                'network_id' => $network->id,
+                'package_id' => $package->id,
+                'count' => count($cardsInput),
+                'card_length' => $request->input('card_length') ?: (isset($cardsInput[0]['code']) ? strlen((string) $cardsInput[0]['code']) : null),
+                'prefix' => $request->input('prefix'),
+                'suffix' => $request->input('suffix'),
+                'created_by' => $user->id,
+            ]);
+
+            $createdCards = [];
+            foreach ($cardsInput as $item) {
+                $code = trim((string) ($item['code'] ?? ''));
+                if ($code === '') {
+                    $skipped++;
+                    continue;
+                }
+                if (isset($existingSet[$code])) {
+                    $skipped++;
+                    continue;
+                }
+
+                $password = isset($item['password']) ? (string) $item['password'] : '';
+
+                $card = Card::create([
+                    'network_id' => $network->id,
+                    'package_id' => $package->id,
+                    'code' => $code,
+                    'password' => $password,
+                    'status' => 'available',
+                    'generated_batch_id' => $batch->id,
+                    'assigned_shop_id' => $assignShopId,
+                ]);
+
+                if ($assignShopId) {
+                    \App\Models\ShopCard::create([
+                        'shop_id' => $assignShopId,
+                        'card_id' => $card->id,
+                        'assigned_at' => now(),
+                    ]);
+                }
+
+                $createdCards[] = $card;
+                $stored++;
+                if ($firstCode === null) {
+                    $firstCode = $code;
+                }
+                $lastCode = $code;
+            }
+
+            $batch->update([
+                'first_code' => $firstCode,
+                'last_code' => $lastCode,
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'تم حفظ الكروت بنجاح',
+                'batch' => $batch->fresh(),
+                'summary' => [
+                    'total_requested' => count($cardsInput),
+                    'successful' => $stored,
+                    'skipped' => $skipped,
+                    'first_code' => $firstCode,
+                    'last_code' => $lastCode,
+                ],
+                'cards' => collect($createdCards)->map(function ($card) {
+                    return [
+                        'id' => $card->id,
+                        'code' => $card->code,
+                        'password' => $card->password,
+                    ];
+                }),
+            ], 201);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Import Cards Error', [
+                'network_id' => $network->id,
+                'error' => $e->getMessage(),
+            ]);
+            return response()->json([
+                'message' => 'حدث خطأ أثناء حفظ الكروت: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
     private function syncPackagesFromProfiles(Network $network, array $profiles, ?string $mode): void
     {
         foreach ($profiles as $profile) {

@@ -113,6 +113,8 @@ class NetworkController extends Controller
             'api_port' => 'nullable|integer|min:1|max:65535',
             'mikrotik_user' => 'required|string',
             'mikrotik_password' => 'required|string',
+            'mikrotik_mode' => 'nullable|in:hotspot,user_manager,auto',
+            'user_manager_customer' => 'nullable|string|max:255',
             'subscription_type' => 'nullable|in:monthly,yearly',
             'subscription_start_at' => 'nullable|date',
             'subscription_end_at' => 'nullable|date|after:subscription_start_at',
@@ -126,6 +128,8 @@ class NetworkController extends Controller
             'api_port'             => $request->api_port ?? 8728,
             'mikrotik_user'        => $request->mikrotik_user,
             'mikrotik_password'    => encrypt($request->mikrotik_password), // Encrypt password
+            'mikrotik_mode'        => $request->input('mikrotik_mode', 'hotspot'),
+            'user_manager_customer' => $request->input('user_manager_customer'),
             'subscription_type'    => $request->subscription_type,
             'subscription_start_at' => $request->subscription_start_at,
             'subscription_end_at'   => $request->subscription_end_at,
@@ -148,6 +152,8 @@ class NetworkController extends Controller
             'api_port' => 'sometimes|integer|min:1|max:65535',
             'mikrotik_user' => 'sometimes|string',
             'mikrotik_password' => 'sometimes|string',
+            'mikrotik_mode' => 'sometimes|in:hotspot,user_manager,auto',
+            'user_manager_customer' => 'sometimes|nullable|string|max:255',
             'subscription_type' => 'sometimes|in:monthly,yearly',
             'subscription_start_at' => 'sometimes|date',
             'subscription_end_at' => 'sometimes|date|after:subscription_start_at',
@@ -156,6 +162,7 @@ class NetworkController extends Controller
 
         $data = $request->only([
             'name', 'ip_address', 'api_port', 'mikrotik_user',
+            'mikrotik_mode', 'user_manager_customer',
             'subscription_type', 'subscription_start_at', 'subscription_end_at', 'status'
         ]);
 
