@@ -1,5 +1,4 @@
 <?php
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
@@ -27,13 +26,7 @@ Route::get('/storage-proxy/{path}', function ($path) {
 
 
 
-Route::get('/run-migrate', function (Request $request) {
-    $token = $request->query('token');
-    $serverToken = env('MAINTENANCE_TOKEN');
-    if (!$serverToken || !$token || !hash_equals($serverToken, $token)) {
-        abort(403, 'غير مصرح');
-    }
-
+Route::get('/run-migrate', function () {
     try {
         Artisan::call('migrate --force');
         return "تم رفع الجداول بنجاح: <br><pre>" . Artisan::output() . "</pre>";
@@ -42,17 +35,7 @@ Route::get('/run-migrate', function (Request $request) {
     }
 });
 
-Route::get('/run-storage-link', function (Request $request) {
-    $token = $request->query('token');
-    $serverToken = env('MAINTENANCE_TOKEN');
-    if (!$serverToken || !$token || !hash_equals($serverToken, $token)) {
-        abort(403, 'غير مصرح');
-    }
-
-    try {
-        Artisan::call('storage:link');
-        return "تم تفعيل storage:link بنجاح: <br><pre>" . Artisan::output() . "</pre>";
-    } catch (\Exception $e) {
-        return "فشل تفعيل storage:link: " . $e->getMessage();
-    }
+Route::get('/setup-storage', function () {
+    Artisan::call('storage:link');
+    return "تم إنشاء اختصار التخزين بنجاح!";
 });
